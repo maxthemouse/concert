@@ -1,123 +1,111 @@
 """Motor Dummy."""
 import random
-from concert.base import HardLimitError
+from concert.base import HardLimitError, Quantity
 from concert.quantities import q
 from concert.devices.motors import base
+from time import sleep
+
+MOVEMENT_TIME_STEPS = 0.01*q.s
 
 
 class _PositionMixin(object):
     def __init__(self):
-        self.lower = -100 * q.mm
-        self.upper = +100 * q.mm
-        self._position = random.uniform(self.lower, self.upper)
+        self._position = random.uniform(-100*q.mm, 100*q.mm)
+        self._moving = False
+        self._lower_hard_limit = -100*q.mm
+        self._upper_hard_limit = 100*q.mm
 
     def _set_position(self, position):
-        if position < self.lower:
-            self._position = self.lower
-            raise HardLimitError('hard-limit')
-        elif position > self.upper:
-            self._position = self.upper
-            raise HardLimitError('hard-limit')
+        direction = 0
+        if self.position < position:
+            direction = 1
         else:
-            self._position = position
+            direction = -1
+
+        if direction:
+            self._moving = True
+            while((direction * self._position) < (direction * position) and self._moving):
+                self._position += direction * self.motion_velocity * MOVEMENT_TIME_STEPS
+                sleep(MOVEMENT_TIME_STEPS.to(q.s).magnitude)
+                if self._position < self._lower_hard_limit:
+                    raise HardLimitError('hard-limit')
+                if self._position > self._upper_hard_limit:
+                    self._moving = False
+                    raise HardLimitError('hard-limit')
+        self._moving = False
 
     def _get_position(self):
         return self._position
 
     def _stop(self):
-        pass
+        self._moving = False
+
+    def _set_motion_velocity(self, vel):
+        self._motion_velocity = vel
+
+    def _get_motion_velocity(self):
+        return self._motion_velocity
+
+    def _get_state(self):
+        if self._moving:
+            return 'moving'
+        if self._position > self._lower_hard_limit and self._position < self._upper_hard_limit:
+            return 'standby'
+        return 'hard-limit'
 
 
-class _ContinuousMixin(object):
-    def __init__(self):
-        super(_ContinuousMixin, self).__init__()
-        self.velocity_lower = -100 * q.mm / q.s
-        self.velocity_upper = 100 * q.mm / q.s
-        self._velocity = 0 * q.mm / q.s
-
-    def _set_velocity(self, velocity):
-        if velocity < self.velocity_lower:
-            self._velocity = self.velocity_lower
-            raise HardLimitError('hard-limit')
-        elif velocity > self.velocity_upper:
-            self._velocity = self.velocity_upper
-            raise HardLimitError('hard-limit')
-        else:
-            self._velocity = velocity
-
-    def _get_velocity(self):
-        return self._velocity
-
-
-class LinearMotor(base.LinearMotor, _PositionMixin):
+class LinearMotor(_PositionMixin, base.LinearMotor):
 
     """A linear step motor dummy."""
 
+    motion_velocity = Quantity(q.mm/q.s)
+
     def __init__(self, position=None):
-        super(LinearMotor, self).__init__()
+        base.LinearMotor.__init__(self)
         _PositionMixin.__init__(self)
+        self.motion_velocity = 2*q.mm/q.s
 
         if position:
             self._position = position
 
-    def _get_state(self):
-        if self._position > self.lower and self._position < self.upper:
-            return 'standby'
 
-        return 'hard-limit'
-
-
-class ContinuousLinearMotor(LinearMotor, base.ContinuousLinearMotor, _ContinuousMixin):
+class ContinuousLinearMotor(LinearMotor, base.ContinuousLinearMotor):
 
     """A continuous linear motor dummy."""
 
     def __init__(self):
-        super(ContinuousLinearMotor, self).__init__()
-        _ContinuousMixin.__init__(self)
-
-    def _get_state(self):
-        if self.velocity.magnitude != 0:
-            return 'moving'
-
-        return LinearMotor._get_state(self)
+        base.ContinuousLinearMotor.__init__(self)
+        LinearMotor.__init__(self)
 
     def _stop(self):
-        self._velocity = 0 * q.mm / q.s
+        self._moving = False
 
 
-class RotationMotor(base.RotationMotor, _PositionMixin):
+class RotationMotor(_PositionMixin, base.RotationMotor):
 
     """A rotational step motor dummy."""
 
-    def __init__(self):
-        super(RotationMotor, self).__init__()
-        _PositionMixin.__init__(self)
-        self.lower = -float("Inf") * q.deg
-        self.upper = float("Inf") * q.deg
-        self._position = self._position.magnitude * q.deg
+    motion_velocity = Quantity(q.deg/q.s)
 
-    def _get_state(self):
-        return 'standby'
+    def __init__(self):
+        base.RotationMotor.__init__(self)
+        _PositionMixin.__init__(self)
+        self._position = 0 * q.deg
+        self._lower_hard_limit = -720*q.deg
+        self._upper_hard_limit = 720*q.deg
+        self.motion_velocity = 5*q.deg/q.s
+        self['position'].lower = -360 * q.deg
+        self['position'].upper = 360 * q.deg
 
 
 class ContinuousRotationMotor(RotationMotor,
-                              base.ContinuousRotationMotor,
-                              _ContinuousMixin):
+                              base.ContinuousRotationMotor):
 
     """A continuous rotational step motor dummy."""
 
     def __init__(self):
-        super(ContinuousRotationMotor, self).__init__()
-        _ContinuousMixin.__init__(self)
-        self.velocity_lower = self.velocity_lower.magnitude * q.deg / q.s
-        self.velocity_upper = self.velocity_upper.magnitude * q.deg / q.s
-        self._velocity = self._velocity.magnitude * q.deg / q.s
-
-    def _get_state(self):
-        if abs(self.velocity) > 1e-3 * q.deg / q.s:
-            return 'moving'
-
-        return RotationMotor._get_state(self)
+        base.ContinuousRotationMotor.__init__(self)
+        RotationMotor.__init__(self)
 
     def _stop(self):
-        self._velocity = 0 * q.deg / q.s
+        self._moving = False
