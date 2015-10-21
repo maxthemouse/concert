@@ -77,6 +77,16 @@ class ContinuousLinearMotor(LinearMotor, base.ContinuousLinearMotor):
         base.ContinuousLinearMotor.__init__(self)
         LinearMotor.__init__(self)
 
+    def _set_velocity(self, vel):
+        if vel.magnitude > 0:
+            self.motion_velocity = vel
+            self.set_position(self['position'].upper)
+        if vel.magnitude < 0:
+            self.motion_velocity = vel
+            self.set_position(self['position'].lower)
+        if vel.magnitude == 0:
+            self.stop()
+
     def _stop(self):
         self._moving = False
 
@@ -106,6 +116,16 @@ class ContinuousRotationMotor(RotationMotor,
     def __init__(self):
         base.ContinuousRotationMotor.__init__(self)
         RotationMotor.__init__(self)
+
+    def _set_velocity(self, vel):
+        if vel.magnitude > 0:
+            self.motion_velocity = vel
+            self.set_position(self['position'].upper)
+        if vel.magnitude < 0:
+            self.motion_velocity = vel
+            self.set_position(self['position'].lower)
+        if vel.magnitude == 0:
+            self.stop()
 
     def _stop(self):
         self._moving = False
