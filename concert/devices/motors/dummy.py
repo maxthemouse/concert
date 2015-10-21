@@ -19,7 +19,7 @@ class _PositionMixin(object):
         direction = 0
         if self.position < position:
             direction = 1
-        else:
+        elif self.position > position:
             direction = -1
 
         if direction:
