@@ -154,11 +154,17 @@ class Camera(base.Camera):
         self._record_shape = None
         self._record_dtype = None
 
-    @transition(target='readout')
+    def _get_state(self):
+        if self.uca.is_readout():
+            return 'readout'
+        if self.uca.is_recording():
+            return 'recording'
+        else:
+            return 'standby'
+
     def start_readout(self):
         self.uca.start_readout()
 
-    @transition(target='standby')
     def stop_readout(self):
         self.uca.stop_readout()
 
@@ -184,14 +190,12 @@ class Camera(base.Camera):
         uca_value = getattr(self.uca.enum_values.trigger_source, source)
         self._uca_set_trigger(self, uca_value)
 
-    @transition(target='recording')
     @_translate_gerror
     def _record_real(self):
         self._record_shape = self.roi_height.magnitude, self.roi_width.magnitude
         self._record_dtype = np.uint16 if self.sensor_bitdepth.magnitude > 8 else np.uint8
         self.uca.start_recording()
 
-    @transition(target='standby')
     @_translate_gerror
     def _stop_real(self):
         self.uca.stop_recording()
